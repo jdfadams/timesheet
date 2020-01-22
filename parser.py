@@ -36,12 +36,12 @@ DAY_LINE = (
     r')?.*$'  # REMOVE THE TRAILING .* AT THE END.
 )
 
-SPLIT_CATEGORY_PATTERN = fr'({DURATION_PATTERN})\s*(?!hr|am|pm)(\w[\w\-_/]*)'
-SPLIT_LINE = fr'^\s*{SPLIT_CATEGORY_PATTERN}\s*(,\s*{SPLIT_CATEGORY_PATTERN}\s*)*$'
+EXTRA_LINE = fr'^OVERAGE\s+(?P<overage>{DURATION_PATTERN})\s*(,\s*HOLIDAY\s+(?P<holiday>{DURATION_PATTERN})\s*)?$'
 
 INTERVAL_LINE = fr'^(?P<start>{TIME_PATTERN})\s*-\s*(?P<end>{TIME_PATTERN})(\s+(?P<total>{DURATION_PATTERN}))?\s*$'
 
-EXTRA_LINE = fr'^OVERAGE\s+(?P<overage>{DURATION_PATTERN})\s*(,\s*HOLIDAY\s+(?P<holiday>{DURATION_PATTERN})\s*)?$'
+SPLIT_CATEGORY_PATTERN = fr'({DURATION_PATTERN})\s*(?!hr|am|pm)(\w[\w\-_/]*)'
+SPLIT_LINE = fr'^\s*{SPLIT_CATEGORY_PATTERN}\s*(,\s*{SPLIT_CATEGORY_PATTERN}\s*)*$'
 
 
 def month_to_int(string):
