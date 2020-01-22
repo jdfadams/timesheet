@@ -1,13 +1,13 @@
 from collections import defaultdict
-import csv
 import datetime
 from decimal import Decimal
 import logging
 import re
 import os
 
-NOW = datetime.datetime.now()
-TODAY = NOW.date()
+from . import utils
+
+logger = logging.getLogger(__name__)
 
 MONTHS = [
     r'Jan(uary)?',
@@ -43,8 +43,6 @@ INTERVAL_LINE = fr'^(?P<start>{TIME_PATTERN})\s*-\s*(?P<end>{TIME_PATTERN})(\s+(
 
 EXTRA_LINE = fr'^OVERAGE\s+(?P<overage>{DURATION_PATTERN})\s*(,\s*HOLIDAY\s+(?P<holiday>{DURATION_PATTERN})\s*)?$'
 
-logger = logging.getLogger(__name__)
-
 
 def month_to_int(string):
     for i, pattern in enumerate(MONTHS):
@@ -74,7 +72,7 @@ def parse_duration(string):
     return timedelta
 
 
-def parse_time(string, date=TODAY):
+def parse_time(string, date=utils.TODAY):
     match = re.match(fr'^{TIME_PATTERN}$', string)
     if not match:
         raise Exception(f'{string.__repr__()} is not a time.')
@@ -98,18 +96,6 @@ def parse_time(string, date=TODAY):
     return datetime.datetime.combine(date, time)
 
 
-def td_hms(td, fmt='{hours:d}:{minutes:02d}:{seconds:02d}'):
-    seconds = td.total_seconds()
-    hours, seconds = divmod(seconds, 3600)
-    minutes, seconds = divmod(seconds, 60)
-    d = {
-            'hours': round(hours),
-            'minutes': round(minutes),
-            'seconds': round(seconds),
-    }
-    return fmt.format(**d)
-
-
 class Parser:
 
     def __init__(self, match):
@@ -124,8 +110,8 @@ class Day(Parser):
         month = month_to_int(month)
         day = match.group('day')
         day = int(day)
-        date = datetime.date(year=TODAY.year, month=month, day=day)
-        if date > TODAY:
+        date = datetime.date(year=utils.TODAY.year, month=month, day=day)
+        if date > utils.TODAY:
             date = date.replace(year=date.year - 1)
         total = match.group('total')
         if total:
@@ -236,7 +222,7 @@ class Split(Parser):
         return ', '.join(f'{total} {category}' for category, total in self.split.items())
 
 
-def _parse_timesheet(path):
+def parse(path):
     with open(path, 'r') as fp:
         lines = fp.readlines()
     extra = None
@@ -306,62 +292,9 @@ def _parse_timesheet(path):
     for day in days:
         print(str(day))
     total = sum((day.adjusted_total or datetime.timedelta() for day in days), datetime.timedelta())
-    print('TOTAL:', td_hms(total))
+    print('TOTAL:', utils.td_hms(total))
     print('SPLIT:')
     for category, duration in split_totals.items():
-        print(f'  {category}: {td_hms(duration)}')
+        print(f'  {category}: {utils.td_hms(duration)}')
     print('OVERAGE:', running_overage)
     print('HOLIDAY:', running_holiday)
-
-    NAME = 'Joseph Adams'
-    RATE = 35.50
-    rows = []
-    rows += [
-            [f'{NAME} Timesheet'],
-            ['<date range>'],
-            ['Totals']
-            ['uuid', 'Worker', 'Total', 'Hours', 'Rate'],
-            [2112, NAME, td_hms(total), RATE],
-            [],
-            ['Splits'],
-            ['Worker', 'Account', 'Class', 'Memo', 'Pay', 'Hours'],
-            [NAME]
-    ]
-
-    dir_path, basename = os.path.split(path)
-    root, ext = os.path.splitext(basename)
-    with open(os.path.join(dir_path, f'{root}.csv'), 'w') as fp:
-        writer = csv.writer(fp)
-        writer.write_rows(rows)
-
-
-def _configure_logging(verbosity):
-    handler = logging.StreamHandler()
-    logger.addHandler(handler)
-    log_levels = [
-            logging.ERROR,
-            logging.INFO,
-            logging.DEBUG,
-    ]
-    log_level = log_levels[min(verbosity, len(log_levels) - 1)]
-    handler.setLevel(log_level)
-    logger.setLevel(log_level)
-
-
-def _parse_args():
-    import argparse
-    parser = argparse.ArgumentParser(description='parse a timesheet')
-    parser.add_argument('timesheet', help='a path to a timesheet')
-    parser.add_argument('-v', action='count', default=0, dest='verbosity', help='repeat to increase verbosity')
-    args = parser.parse_args()
-    return args
-
-
-def main():
-    args = _parse_args()
-    _configure_logging(args.verbosity)
-    _parse_timesheet(args.timesheet)
-
-
-if __name__ == '__main__':
-    main()
