@@ -1,99 +1,11 @@
 from collections import defaultdict
 import datetime
-from decimal import Decimal
 import logging
 import re
-import os
 
-from . import utils
+from . import patterns as p, tokenizer, utils
 
 logger = logging.getLogger(__name__)
-
-MONTHS = [
-    r'Jan(uary)?',
-    r'Feb(ruary)?',
-    r'Mar(ch)?',
-    r'Apr(il)?',
-    r'May',
-    r'June?',
-    r'July?',
-    r'Aug(ust)?',
-    r'Sep(t(ember)?)?',
-    r'Oct(ober)?',
-    r'Nov(ember)?',
-    r'Dec(ember)?',
-]
-
-HHMM_PATTERN = r'\d\d?(?::\d\d)?'
-TIME_PATTERN = fr'{HHMM_PATTERN}(?:am|pm)'
-DURATION_PATTERN = fr'({HHMM_PATTERN}|\d+\.\d+)(hr)?'
-
-MONTH_PATTERN = r'|'.join(MONTHS)
-DAY_LINE = (
-    fr'^(?P<month>{MONTH_PATTERN})\s+(?P<day>\d\d?)(\s*\((?P<comment>.*?)\))?\s*:('
-        fr'\s*(?P<total>{DURATION_PATTERN})'
-        fr'(\s*-->\s*(?P<adjusted_total>{DURATION_PATTERN})(\s*,\s*(?P<overage>{DURATION_PATTERN})\s+overage)?(\s*,\s*(?P<holiday>{DURATION_PATTERN})\s+holiday)?)?'
-    r')?.*$'  # REMOVE THE TRAILING .* AT THE END.
-)
-
-EXTRA_LINE = fr'^OVERAGE\s+(?P<overage>{DURATION_PATTERN})\s*(,\s*HOLIDAY\s+(?P<holiday>{DURATION_PATTERN})\s*)?$'
-
-INTERVAL_LINE = fr'^(?P<start>{TIME_PATTERN})\s*-\s*(?P<end>{TIME_PATTERN})(\s+(?P<total>{DURATION_PATTERN}))?\s*$'
-
-SPLIT_CATEGORY_PATTERN = fr'({DURATION_PATTERN})\s*(?!hr|am|pm)(\w[\w\-_/]*)'
-SPLIT_LINE = fr'^\s*{SPLIT_CATEGORY_PATTERN}\s*(,\s*{SPLIT_CATEGORY_PATTERN}\s*)*$'
-
-
-def month_to_int(string):
-    for i, pattern in enumerate(MONTHS):
-        if re.match(pattern, string):
-            return i + 1
-    raise Exception(f'{string.__repr__()} is not a month')
-
-
-def parse_duration(string):
-    match = re.match(fr'^{DURATION_PATTERN}$', string)
-    if not match:
-        raise Exception(f'{string.__repr__()} is not a duration.')
-    if string.endswith('hr'):
-        string = string[:-2]
-    if ':' in string:
-        hour, minute = string.split(':')
-        hour = int(hour)
-        minute = int(minute)
-    else:
-        x = Decimal(string)
-        hour = int(x)
-        minute = round((x - hour) * 60)
-    assert 0 <= hour
-    assert 0 <= minute < 60
-    timedelta = datetime.timedelta(hours=hour, minutes=minute)
-    logger.debug(f'parsed duration: {string.__repr__()} --> {timedelta}')
-    return timedelta
-
-
-def parse_time(string, date=utils.TODAY):
-    match = re.match(fr'^{TIME_PATTERN}$', string)
-    if not match:
-        raise Exception(f'{string.__repr__()} is not a time.')
-    hhmm = string[:-2]
-    try:
-        hour, minute = hhmm.split(':')
-    except:
-        hour, minute = hhmm, 0
-    hour = int(hour)
-    assert 1 <= hour <= 12
-    minute = int(minute)
-    assert 0 <= minute < 60
-    meridian = string[-2:]
-    assert meridian in ['am', 'pm', ]
-    if hour == 12 and meridian == 'am':
-        hour = 0
-    elif hour < 12 and meridian == 'pm':
-        hour += 12
-    time = datetime.time(hour=hour, minute=minute)
-    logger.debug(f'parsed time: {string.__repr__()} --> {time}')
-    return datetime.datetime.combine(date, time)
 
 
 class Parser:
@@ -106,25 +18,25 @@ class Day(Parser):
 
     def __init__(self, match):
         super().__init__(match)
-        month = match.group('month')
-        month = month_to_int(month)
-        day = match.group('day')
+        month = match.group('day_month')
+        month = utils.month(month)
+        day = match.group('day_day')
         day = int(day)
         date = datetime.date(year=utils.TODAY.year, month=month, day=day)
         if date > utils.TODAY:
             date = date.replace(year=date.year - 1)
-        total = match.group('total')
+        total = match.group('day_total')
         if total:
-            total = parse_duration(total)
-        adjusted_total = match.group('adjusted_total')
+            total = utils.duration(total)
+        adjusted_total = match.group('day_adjusted_total')
         if adjusted_total:
-            adjusted_total = parse_duration(adjusted_total)
-        overage = match.group('overage')
+            adjusted_total = utils.duration(adjusted_total)
+        overage = match.group('day_overage')
         if overage:
-            overage = parse_duration(overage)
-        holiday = match.group('holiday')
+            overage = utils.duration(overage)
+        holiday = match.group('day_holiday')
         if holiday:
-            holiday = parse_duration(holiday)
+            holiday = utils.duration(holiday)
         self.date = date
         self.total = total
         self.adjusted_total = adjusted_total
@@ -167,11 +79,11 @@ class Extra(Parser):
 
     def __init__(self, match):
         super().__init__(match)
-        overage = match.group('overage')
-        overage = parse_duration(overage)
-        holiday = match.group('holiday')
+        overage = match.group('extra_overage')
+        overage = utils.duration(overage)
+        holiday = match.group('extra_holiday')
         if holiday:
-            holiday = parse_duration(holiday)
+            holiday = utils.duration(holiday)
         self.overage = overage
         self.holiday = holiday
 
@@ -180,15 +92,15 @@ class Interval(Parser):
 
     def __init__(self, match, date):
         super().__init__(match)
-        start = match.group('start')
-        start = parse_time(start, date)
-        end = match.group('end')
-        end = parse_time(end, date)
+        start = match.group('interval_start')
+        start = utils.time(start, date)
+        end = match.group('interval_end')
+        end = utils.time(end, date)
         if start > end:
             end += datetime.timedelta(days=1)
-        total = match.group('total')
+        total = match.group('interval_total')
         if total:
-            total = parse_duration(total)
+            total = utils.duration(total)
         self.start = start
         self.end = end
         self.total = total
@@ -211,9 +123,9 @@ class Split(Parser):
         strings = match.group().split(',')
         strings = [s.strip() for s in strings]
         strings = [s for s in strings if s]
-        matches = [re.match(SPLIT_CATEGORY_PATTERN, s) for s in strings]
+        matches = [re.match(p.SPLIT_CATEGORY_PATTERN, s) for s in strings]
         split = {
-                m.group(4).lower(): parse_duration(m.group(1))
+                m.group(5).lower(): utils.duration(m.group(1))
                 for m in matches
         }
         self.split = split
@@ -223,36 +135,28 @@ class Split(Parser):
 
 
 def parse(path):
-    with open(path, 'r') as fp:
-        lines = fp.readlines()
+    tokens = tokenizer.tokenize(path)
     extra = None
     days = []
-    for line in lines:
+    for token in tokens:
         try:
-            match = re.match(DAY_LINE, line)
-            if match:
-                day = Day(match)
+            if token.type == tokenizer.DAY:
+                day = Day(token.match)
                 days += [day, ]
-                continue
-            match = re.match(INTERVAL_LINE, line)
-            if match:
+            elif token.type == tokenizer.INTERVAL:
                 day = days[-1]
-                interval = Interval(match, day.date)
+                interval = Interval(token.match, day.date)
                 day.intervals += [interval, ]
-                continue
-            match = re.match(SPLIT_LINE, line)
-            if match:
-                split = Split(match)
+            elif token.type == tokenizer.SPLIT:
+                split = Split(token.match)
                 day = days[-1]
                 day.split = split
-                continue
-            match = re.match(EXTRA_LINE, line)
-            if match:
-                extra = Extra(match)
-                continue
+            elif token.type == tokenizer.EXTRA:
+                extra = Extra(token.match)
+            else:
+                raise Exception(f'unexpected token: {token}')
         except Exception as error:
             logger.exception(error)
-            logger.error(f'line: {line}')
             raise
 
     for day in days:
@@ -292,9 +196,9 @@ def parse(path):
     for day in days:
         print(str(day))
     total = sum((day.adjusted_total or datetime.timedelta() for day in days), datetime.timedelta())
-    print('TOTAL:', utils.td_hms(total))
+    print('TOTAL:', utils.format_td(total))
     print('SPLIT:')
     for category, duration in split_totals.items():
-        print(f'  {category}: {utils.td_hms(duration)}')
+        print(f'  {category}: {utils.format_td(duration)}')
     print('OVERAGE:', running_overage)
     print('HOLIDAY:', running_holiday)
