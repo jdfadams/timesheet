@@ -169,16 +169,10 @@ def parse(path):
         adjusted_total = day.adjusted_total
         overage = day.overage or datetime.timedelta()
         holiday = day.holiday or datetime.timedelta()
-        # hack
-        if not adjusted_total:
-            print(f'SKIPPING {day.date}')
-            print(day)
-            continue
-        # end hack
         used_extra = adjusted_total - total
         used_overage = running_overage - overage
         used_holiday = running_holiday - holiday
-        if False and used_overage + used_holiday != used_extra:
+        if used_overage + used_holiday != used_extra:
             raise Exception(
                 f'{day.date}: The recorded overage ({overage}) and holiday ({holiday}) hours'
                 f' are inconsistent with the {used_extra} hours used.'
