@@ -16,9 +16,15 @@ class Error(Exception):
 
 
 def duration(string):
+    print(f'DURATION: {string}')
     match = re.match(fr'^{p.DURATION_PATTERN}$', string)
     if not match:
         raise Error(f'{string.__repr__()} is not a duration.')
+    if string.startswith('-'):
+        sign = -1
+        string = string[1:]
+    else:
+        sign = 1
     if string.endswith('hr'):
         string = string[:-2]
     if ':' in string:
@@ -31,7 +37,7 @@ def duration(string):
         minute = round((x - hour) * 60)
     assert 0 <= hour
     assert 0 <= minute < 60
-    timedelta = datetime.timedelta(hours=hour, minutes=minute)
+    timedelta = sign * datetime.timedelta(hours=hour, minutes=minute)
     logger.debug(f'duration: {string.__repr__()} --> {timedelta}')
     return timedelta
 
