@@ -13,7 +13,7 @@ MONTHS = [
     r'Dec(ember)?',
 ]
 
-HHMM_PATTERN = r'(\+|-)?\d\d?(?::\d\d)?'
+HHMM_PATTERN = r'-?\d\d?(?::\d\d)?'
 TIME_PATTERN = fr'{HHMM_PATTERN}(?:am|pm)'
 DURATION_PATTERN = fr'({HHMM_PATTERN}|\d+\.\d+)(hr)?'
 

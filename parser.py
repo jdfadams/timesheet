@@ -125,7 +125,7 @@ class Split(Parser):
         strings = [s for s in strings if s]
         matches = [re.match(p.SPLIT_CATEGORY_PATTERN, s) for s in strings]
         split = {
-                m.group(5).lower(): utils.duration(m.group(1))
+                m.group(4).lower(): utils.duration(m.group(1))
                 for m in matches
         }
         self.split = split
