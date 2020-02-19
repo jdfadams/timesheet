@@ -1,3 +1,4 @@
+import collections
 import datetime
 from decimal import Decimal
 import logging
@@ -9,6 +10,14 @@ logger = logging.getLogger(__name__)
 
 NOW = datetime.datetime.now()
 TODAY = NOW.date()
+
+
+_Duration = collections.namedtuple('_Duration', [
+        'hours',
+        'minutes',
+        'seconds',
+        'sign',
+])
 
 
 class Error(Exception):
@@ -73,13 +82,30 @@ def time(string, date=TODAY):
     return datetime.datetime.combine(date, time)
 
 
-def format_td(td, fmt='{hours:d}:{minutes:02d}:{seconds:02d}'):
+def _format_td(td):
     seconds = td.total_seconds()
+    if seconds < 0:
+        seconds = -seconds
+        sign = '-'
+    else:
+        sign = '';
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
     d = {
             'hours': round(hours),
             'minutes': round(minutes),
             'seconds': round(seconds),
+            'sign': sign,
     }
-    return fmt.format(**d)
+    return _Duration(**d)
+
+
+def format_td(td, fmt='{sign}{hours:d}:{minutes:02d}:{seconds:02d}'):
+    d = _format_td(td)
+    return fmt.format(**d._asdict())
+
+
+def format_td_short(td):
+    d = _format_td(td)
+    seconds = f':{d.seconds:02d}' if d.seconds else ''
+    return f'{d.sign}{d.hours:d}:{d.minutes:02d}{seconds}'
