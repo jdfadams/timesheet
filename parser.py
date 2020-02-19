@@ -196,3 +196,17 @@ def parse(path):
         print(f'  {category}: {utils.format_td(duration)}')
     print('OVERAGE:', running_overage)
     print('HOLIDAY:', running_holiday)
+
+    import csv
+    import sys
+    w = csv.writer(sys.stdout)
+    w.writerow(['Date', 'Hours'])
+    for day in days:
+        w.writerow([day.date, utils.format_td_short(day.adjusted_total)])
+
+    w.writerow(['Project', 'Class', 'Hours'])
+    for category, duration in split_totals.items():
+        w.writerow([category, '-', utils.format_td_short(duration)])
+
+    rate = 35.5
+    w.writerow([f'Total: {utils.format_td_short(total)}hr x {utils.format_usd(rate)}/hr = ...'])

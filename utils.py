@@ -109,3 +109,7 @@ def format_td_short(td):
     d = _format_td(td)
     seconds = f':{d.seconds:02d}' if d.seconds else ''
     return f'{d.sign}{d.hours:d}:{d.minutes:02d}{seconds}'
+
+
+def format_usd(x):
+    return f'${x:.2f}'
